@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-edge;
+  }
+  body {
+    @apply bg-surface font-sans text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  .dark body {
+    @apply bg-surface-dark text-ink-dark;
+  }
+  ::selection {
+    @apply bg-brand-500/20;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-edge/60;
+  }
+  .dark .glass {
+    @apply bg-surface-dark-card/70 border-edge-dark/60;
+  }
+  .skeleton {
+    @apply relative overflow-hidden bg-slate-200/60 rounded-xl;
+  }
+  .dark .skeleton {
+    @apply bg-slate-700/40;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+  }
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.08),
+      transparent
+    );
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-edge rounded-full;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-edge-dark;
+  }
+}

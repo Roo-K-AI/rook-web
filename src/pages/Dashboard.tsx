@@ -14,7 +14,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    productApi.getAllProducts().then((data) => {
+    productApi.getProducts().then((data) => {
       setProducts(data);
       setLoading(false);
     });

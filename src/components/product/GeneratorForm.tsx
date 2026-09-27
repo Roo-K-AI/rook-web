@@ -27,15 +27,26 @@ export function GeneratorForm({ onCreated }: GeneratorFormProps) {
 
     setLoading(true);
     try {
-      const result = await productApi.createProduct({
+      const product = await productApi.createProduct({
         name: name.trim(),
         description: description.trim() || undefined,
         price: price ? parseFloat(price) : undefined,
       });
+
+      if (!product?.id) {
+        throw new Error('API a renvoyé un produit sans id');
+      }
+
       show('Product created! AI is generating your SEO sheet...', 'success');
-      onCreated(result.product.id);
-    } catch {
-      show('Failed to create product. Please try again.', 'error');
+      onCreated(Number(product.id));
+    } catch (err) {
+      console.error('[GeneratorForm] createProduct failed:', err);
+      show(
+        err instanceof Error
+          ? err.message
+          : 'Failed to create product. Please try again.',
+        'error'
+      );
     } finally {
       setLoading(false);
     }

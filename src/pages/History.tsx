@@ -19,7 +19,7 @@ export function History() {
 
   const load = () => {
     setLoading(true);
-    productApi.getAllProducts().then((data) => {
+    productApi.getProducts().then((data) => {
       setProducts(data);
       setLoading(false);
     });

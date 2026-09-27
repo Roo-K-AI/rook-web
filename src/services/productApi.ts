@@ -1,169 +1,140 @@
+// src/services/productApi.ts
+
+export type RookStatus =
+  | 'accepted'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | null;
+
 export interface Product {
   id: number;
   name: string;
-  description?: string;
-  price?: number;
-  seo_title?: string;
-  meta_description?: string;
-  long_description?: string;
-  benefits?: string[];
-  specifications?: string[];
-  usage_tips?: string[];
-  seo_tags?: string[];
-  rook_status: 'accepted' | 'processing' | 'completed' | 'failed';
-  created_at?: string;
-}
+  description: string | null;
+  price: string | number | null;
 
-export interface CreateProductRequest {
-  name: string;
-  description?: string;
-  price?: number;
-}
+  seo_title: string | null;
+  meta_description: string | null;
+  long_description: string | null;
 
-const API_BASE = 'http://localhost:8000/api/products';
+  benefits: string[] | null;
+  specifications: unknown[] | null;
+  usage_tips: string[] | null;
+  seo_tags: string[] | null;
 
-// --- Mock storage (used when backend is unreachable) ---
-let mockId = 14;
-const mockDb: Record<number, Product> = {};
+  rook_job_id: string | null;
+  rook_status: RookStatus;
 
-function delay(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function generateSeoContent(name: string, description?: string, price?: number) {
-  const desc = description || `Premium ${name.toLowerCase()} designed for everyday excellence`;
-  const priceStr = price ? `${(price / 100).toFixed(2)} €` : 'Premium pricing';
-
-  return {
-    seo_title: `${name} — Premium Quality & Best Price | ROOK Store`,
-    meta_description: `Discover the ${name}: ${desc.slice(0, 120)}. Shop now with fast delivery and best-in-class quality.`,
-    long_description: `The ${name} represents the pinnacle of modern design and engineering. ${desc} Crafted with meticulous attention to detail, this product combines cutting-edge technology with elegant aesthetics to deliver an unparalleled experience.\n\nWhether you're a professional or an enthusiast, the ${name} adapts seamlessly to your needs. Its versatile design makes it perfect for daily use, special occasions, and everything in between.\n\nAvailable now at ${priceStr}, the ${name} offers exceptional value without compromising on quality. Backed by our satisfaction guarantee and comprehensive warranty.`,
-    benefits: [
-      `Premium build quality ensuring long-lasting durability`,
-      `Ergonomic design optimized for maximum comfort`,
-      `Energy-efficient performance that saves resources`,
-      `Sustainable materials with eco-friendly packaging`,
-      `12-month comprehensive warranty included`,
-    ],
-    specifications: [
-      `Material: Aerospace-grade aluminum & premium polycarbonate`,
-      `Dimensions: 240 × 180 × 45 mm`,
-      `Weight: 320 grams`,
-      `Connectivity: Bluetooth 5.2, USB-C, Wi-Fi 6`,
-      `Battery Life: Up to 40 hours continuous use`,
-      `Charging Time: 1.5 hours via USB-C fast charge`,
-      `Operating Temperature: -10°C to 45°C`,
-    ],
-    usage_tips: [
-      `Charge fully before first use to optimize battery lifespan`,
-      `Clean regularly with a soft, dry microfiber cloth`,
-      `Store in a cool, dry place away from direct sunlight`,
-      `Update firmware monthly for the latest features and security patches`,
-      `Use only with certified accessories for best performance`,
-    ],
-    seo_tags: [
-      name.toLowerCase(),
-      'premium quality',
-      'best price',
-      'fast delivery',
-      'eco-friendly',
-      'warranty included',
-      'top rated',
-      'new arrival',
-    ],
+  dates?: {
+    created_at: string | null;
+    updated_at: string | null;
+    time_ago: string | null;
   };
+
+  // Champs bruts (au cas où l'API les renvoie directement)
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
-async function tryFetch(url: string, options?: RequestInit) {
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options?.headers || {}),
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch {
-    return null;
+const BASE_URL =
+  import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+
+/**
+ * Normalise la réponse de l'API en tableau.
+ * Tolère :
+ *   [ ... ]
+ *   { data: [ ... ] }
+ *   { data: { data: [ ... ], meta: {...} } }
+ *   { products: [ ... ] }
+ */
+function normalizeList<T>(json: unknown): T[] {
+  if (Array.isArray(json)) return json as T[];
+
+  if (json && typeof json === 'object') {
+    const obj = json as Record<string, unknown>;
+
+    if (Array.isArray(obj.data)) return obj.data as T[];
+
+    if (
+      obj.data &&
+      typeof obj.data === 'object' &&
+      Array.isArray((obj.data as Record<string, unknown>).data)
+    ) {
+      return (obj.data as Record<string, unknown>).data as T[];
+    }
+
+    if (Array.isArray(obj.products)) return obj.products as T[];
   }
+
+  return [];
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(options.headers ?? {}),
+    },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${res.statusText} — ${text.slice(0, 300)}`);
+  }
+
+  return (await res.json()) as T;
 }
 
 export const productApi = {
-  async createProduct(req: CreateProductRequest): Promise<{ product: Pick<Product, 'id' | 'rook_status'> }> {
-    const backend = await tryFetch(API_BASE, {
+  /**
+   * Retourne TOUJOURS un tableau de produits, quelle que soit
+   * la forme de la réponse backend.
+   */
+  async getProducts(): Promise<Product[]> {
+    const json = await request<unknown>('/api/products');
+    return normalizeList<Product>(json);
+  },
+
+  async getProduct(id: number | string): Promise<Product> {
+    const json = await request<unknown>(`/api/products/${id}`);
+    // Certaines API enveloppent l'objet dans { data: {...} }
+    if (json && typeof json === 'object' && 'data' in (json as object)) {
+      const d = (json as Record<string, unknown>).data;
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        return d as Product;
+      }
+    }
+    return json as Product;
+  },
+
+  async createProduct(payload: Partial<Product>): Promise<Product> {
+    const json = await request<unknown>('/api/products', {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify(payload),
     });
-
-    if (backend?.product?.id) {
-      mockDb[backend.product.id] = {
-        id: backend.product.id,
-        name: req.name,
-        description: req.description,
-        price: req.price,
-        rook_status: backend.product.rook_status || 'accepted',
-        created_at: new Date().toISOString(),
-      };
-      return { product: backend.product };
+    if (json && typeof json === 'object' && 'product' in (json as object)) {
+      return (json as Record<string, unknown>).product as Product;
     }
-
-    // Fallback mock
-    await delay(800);
-    const id = ++mockId;
-    mockDb[id] = {
-      id,
-      name: req.name,
-      description: req.description,
-      price: req.price,
-      rook_status: 'accepted',
-      created_at: new Date().toISOString(),
-    };
-    return { product: { id, rook_status: 'accepted' } };
+    return json as Product;
   },
 
-  async getProduct(id: number): Promise<Product> {
-    const backend = await tryFetch(`${API_BASE}/${id}`);
-
-    if (backend?.id) {
-      mockDb[id] = { ...mockDb[id], ...backend };
-      return backend;
-    }
-
-    // Fallback mock — simulate processing then completion
-    await delay(200);
-    const existing = mockDb[id];
-    if (!existing) throw new Error('Product not found');
-
-    const elapsed = Date.now() - new Date(existing.created_at!).getTime();
-    const PROCESSING_DURATION = 9000;
-
-    if (elapsed >= PROCESSING_DURATION) {
-      const completed: Product = {
-        ...existing,
-        ...generateSeoContent(existing.name, existing.description, existing.price),
-        rook_status: 'completed',
-      };
-      mockDb[id] = completed;
-      return completed;
-    }
-
-    return { ...existing, rook_status: 'processing' };
+  async updateProduct(
+    id: number | string,
+    payload: Partial<Product>
+  ): Promise<Product> {
+    const json = await request<unknown>(`/api/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return json as Product;
   },
 
-  async getAllProducts(): Promise<Product[]> {
-    const backend = await tryFetch(API_BASE);
-    if (Array.isArray(backend)) return backend;
-
-    return Object.values(mockDb).sort(
-      (a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime()
-    );
-  },
-
-  async deleteProduct(id: number): Promise<void> {
-    await tryFetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-    delete mockDb[id];
+  async deleteProduct(id: number | string): Promise<void> {
+    await request<void>(`/api/products/${id}`, { method: 'DELETE' });
   },
 };

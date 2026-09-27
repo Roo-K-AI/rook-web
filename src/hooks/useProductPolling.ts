@@ -1,68 +1,68 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { productApi, type Product } from '@/services/productApi';
 
-const POLL_INTERVAL = 3000;
+type PollingStage =
+  | 'idle'
+  | 'accepted'
+  | 'processing'
+  | 'completed'
+  | 'failed';
 
-export function useProductPolling(productId: number | null) {
+export function useProductPolling(productId?: number) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const stopPolling = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
+  const [stage, setStage] = useState<PollingStage>('idle');
 
   useEffect(() => {
-    if (!productId) return;
+    if (!productId) {
+      setProduct(null);
+      setLoading(false);
+      setStage('idle');
+      return;
+    }
+
     setLoading(true);
-    setError(null);
-    setStage(0);
 
-    let cancelled = false;
-
-    const poll = async () => {
+    const fetchProduct = async () => {
       try {
         const data = await productApi.getProduct(productId);
-        if (cancelled) return;
 
         setProduct(data);
+        setStage(data.rook_status);
 
-        if (data.rook_status === 'accepted') setStage(1);
-        else if (data.rook_status === 'processing') {
-          setStage((s) => Math.max(s, 2));
-        }
-
-        if (data.rook_status === 'completed') {
-          setStage(4);
+        if (
+          data.rook_status === 'completed' ||
+          data.rook_status === 'failed'
+        ) {
           setLoading(false);
-          return;
-        }
-        if (data.rook_status === 'failed') {
-          setError('Generation failed. Please try again.');
-          setLoading(false);
-          return;
+          return true;
         }
 
-        timerRef.current = setTimeout(poll, POLL_INTERVAL);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message || 'Failed to fetch product');
+        return false;
+      } catch (error) {
+        console.error(error);
         setLoading(false);
+        setStage('failed');
+        return true;
       }
     };
 
-    poll();
+    fetchProduct();
 
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
-  }, [productId, stopPolling]);
+    const interval = setInterval(async () => {
+      const finished = await fetchProduct();
 
-  return { product, loading, error, stage };
+      if (finished) {
+        clearInterval(interval);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [productId]);
+
+  return {
+    product,
+    loading,
+    stage,
+  };
 }

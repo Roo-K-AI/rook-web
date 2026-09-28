@@ -1,4 +1,4 @@
-// ProductDetails.tsx
+// src/pages/ProductDetails.tsx
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -79,14 +79,32 @@ export function ProductDetails() {
         </motion.div>
 
         {current &&
-          loading && (
+          current.rook_status === 'failed' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-950/20">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                <div>
+                  <h3 className="font-semibold text-red-600">
+                    Pipeline ROOK indisponible
+                  </h3>
+                  <p className="text-sm text-red-500">
+                    Le produit a été créé mais la génération IA a échoué.
+                    Réessayez dans quelques instants.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {current &&
+          loading &&
+          current.rook_status !== 'failed' && (
             <LoadingState stage={stage} />
           )}
 
         {current &&
           !loading &&
-          current.rook_status ===
-            'completed' && (
+          current.rook_status === 'completed' && (
             <ProductSheet
               product={current}
               onNew={() =>
@@ -97,8 +115,8 @@ export function ProductDetails() {
 
         {current &&
           !loading &&
-          current.rook_status !==
-            'completed' && (
+          current.rook_status !== 'completed' &&
+          current.rook_status !== 'failed' && (
             <LoadingState stage={stage} />
           )}
       </div>
